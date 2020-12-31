@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import logo from "./logo.svg";
 import "./App.css";
 import { withAuthenticator, AmplifySignOut } from "@aws-amplify/ui-react";
-import { API } from "aws-amplify";
+import { API, Storage } from "aws-amplify";
 import { listNotes } from "./graphql/queries";
 import {
   createNote as createNoteMutation,
@@ -25,6 +25,15 @@ function App() {
         listNotes: { items },
       },
     } = await API.graphql({ query: listNotes });
+    await Promise.all(
+      items.map(async (note) => {
+        if (note.image) {
+          const image = await Storage.get(note.image);
+          note.image = image;
+        }
+        return note;
+      })
+    );
     setNotes(items);
   }
 
@@ -34,6 +43,10 @@ function App() {
       query: createNoteMutation,
       variables: { input: formData },
     });
+    if (formData.image) {
+      const image = await Storage.get(formData.image);
+      formData.image = image;
+    }
     setNotes([...notes, formData]);
     setFormData(initialFormState);
   }
@@ -45,6 +58,15 @@ function App() {
       query: deleteNoteMutation,
       variables: { input: { id } },
     });
+  }
+
+  async function onChange(e) {
+    console.log(e.target.files);
+    if (!e.target.files[0]) return;
+    const file = e.target.files[0];
+    setFormData({ ...formData, image: file.name });
+    await Storage.put(file.name, file);
+    fetchNotes();
   }
 
   return (
@@ -62,6 +84,7 @@ function App() {
         placeholder="Note description"
         value={formData.description}
       ></input>
+      <input type="file" onChange={onChange}></input>
       <button onClick={createNote}>Create Note</button>
       <div style={{ marginBottom: 30 }}>
         {notes.map((note) => (
@@ -69,6 +92,13 @@ function App() {
             <h2>{note.name}</h2>
             <p>{note.description}</p>
             <button onClick={() => deleteNote(note)}>Delete note</button>
+            {note.image && (
+              <img
+                src={note.image}
+                alt={`${note.name}`}
+                style={{ width: 400 }}
+              />
+            )}
           </div>
         ))}
       </div>
